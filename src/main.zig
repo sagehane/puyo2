@@ -112,7 +112,11 @@ fn sdl_main() GameError!void {
     const img_flags = c.IMG_INIT_PNG;
     if (c.IMG_Init(img_flags) & img_flags != img_flags) return error.IMG;
 
-    puyo_surface = c.IMG_Load("resources/puyo_sozai.png") orelse return error.IMG;
+    puyo_surface = blk: {
+        const tmp_surface = c.IMG_Load("resources/puyo_sozai.png") orelse return error.IMG;
+        defer c.SDL_FreeSurface(tmp_surface);
+        break :blk c.SDL_ConvertSurface(tmp_surface, surface.*.format, 0) orelse return error.SDL;
+    };
     defer c.SDL_FreeSurface(puyo_surface);
 
     try initGrid(surface);
