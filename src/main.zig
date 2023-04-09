@@ -9,12 +9,17 @@ const GameError = error{
     Other,
 };
 
+fn imgError() GameError {
+    std.debug.print("IMG Error: {s}\n", .{c.IMG_GetError()});
+    return error.IMG;
+}
+
 const puyo_size = 32;
 
 // Some global variables
-var g_surface: *c.SDL_Surface = undefined;
+var g_renderer: *c.SDL_Renderer = undefined;
 var g_window: *c.SDL_Window = undefined;
-var g_puyo_surface: *c.SDL_Surface = undefined;
+var g_puyo_texture: *c.SDL_Texture = undefined;
 
 inline fn tileToRect(
     x: c_int,
@@ -54,7 +59,7 @@ test {
     _ = puyo;
 }
 
-fn initGrid(draw_surface: *c.SDL_Surface, img_surface: *c.SDL_Surface) GameError!void {
+fn initGrid(renderer: *c.SDL_Renderer) GameError!void {
     const wall = &sprite_table[@bitCast(u7, puyo.Data.Sprite{ .colour = .wall })];
     const background = &sprite_table[@bitCast(u7, puyo.Data.Sprite{ .colour = .empty })];
 
@@ -63,34 +68,30 @@ fn initGrid(draw_surface: *c.SDL_Surface, img_surface: *c.SDL_Surface) GameError
     var y: c_int = 0;
     while (y < 12) : (y += 1) {
         rect = tileToRect(0 + 1, y + 1, .{});
-        if (c.SDL_BlitSurface(img_surface, wall, draw_surface, &rect) != 0) return error.SDL;
+        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &rect) != 0) return error.SDL;
 
         rect = tileToRect(7 + 1, y + 1, .{});
-        if (c.SDL_BlitSurface(img_surface, wall, draw_surface, &rect) != 0) return error.SDL;
+        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &rect) != 0) return error.SDL;
 
         var x: c_int = 0;
         while (x < 6) : (x += 1) {
             rect = tileToRect(x + 2, y + 1, .{});
-            if (c.SDL_BlitSurface(img_surface, background, draw_surface, &rect) != 0) return error.SDL;
+            if (c.SDL_RenderCopy(renderer, g_puyo_texture, background, &rect) != 0) return error.SDL;
         }
     }
 
     var x: c_int = 0;
     while (x < 8) : (x += 1) {
         rect = tileToRect(x + 1, 12 + 1, .{});
-        if (c.SDL_BlitSurface(img_surface, wall, draw_surface, &rect) != 0) return error.SDL;
+        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &rect) != 0) return error.SDL;
     }
 }
 
 pub fn main() void {
-    // Don't defer this until now in order to get outputs from the respective error functions
-    // TODO: Think of a way to wrap functions so cleanup functions can be called earlier
-    defer c.SDL_Quit();
-    defer c.IMG_Quit();
     sdl_main() catch |err| {
         switch (err) {
             error.SDL => std.debug.print("SDL Error: {s}\n", .{c.SDL_GetError()}),
-            error.IMG => std.debug.print("IMG Error: {s}\n", .{c.IMG_GetError()}),
+            error.IMG => {},
             error.Other => {},
         }
 
@@ -98,23 +99,26 @@ pub fn main() void {
     };
 }
 
-/// Call the following after:
-/// ```
-/// defer c.SDL_Quit();
-/// defer c.IMG_Quit();
-/// ```
 fn sdl_main() GameError!void {
     try setup();
+    defer c.SDL_Quit();
     defer c.SDL_DestroyWindow(g_window);
-    defer c.SDL_FreeSurface(g_surface);
-    defer c.SDL_FreeSurface(g_puyo_surface);
+    defer c.SDL_DestroyTexture(g_puyo_texture);
 
-    try initGrid(g_surface, g_puyo_surface);
-    if (c.SDL_UpdateWindowSurface(g_window) != 0) return error.SDL;
+    // TODO: Check docs
+    _ = c.SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0x00);
+    _ = c.SDL_RenderClear(g_renderer);
+
+    try initGrid(g_renderer);
+
+    c.SDL_RenderPresent(g_renderer);
 
     var ctrl_mask: u2 = 0b00;
     var event: c.SDL_Event = undefined;
     outer: while (true) {
+        // TODO: https://lazyfoo.net/tutorials/SDL/25_capping_frame_rate/index.php
+        c.SDL_Delay(1000 / 60);
+
         while (c.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
                 c.SDL_QUIT => break :outer,
@@ -143,9 +147,8 @@ fn sdl_main() GameError!void {
 /// ```
 /// defer c.SDL_Quit();
 /// defer c.SDL_DestroyWindow(g_window);
-/// defer c.SDL_FreeSurface(g_surface);
-/// defer c.IMG_Quit();
-/// defer c.SDL_FreeSurface(g_puyo_surface);
+/// defer c.SDL_DestroyRenderer(g_renderer);
+/// defer c.SDL_DestroyTexture(g_puyo_texture);
 /// ```
 fn setup() GameError!void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDL;
@@ -155,27 +158,27 @@ fn setup() GameError!void {
         "Puyo Puyo",
         c.SDL_WINDOWPOS_UNDEFINED,
         c.SDL_WINDOWPOS_UNDEFINED,
-        puyo_size * 22,
-        puyo_size * 17,
-        c.SDL_WINDOW_RESIZABLE,
+        (2 * (8 + 3) + 1) * puyo_size,
+        (1 + 13 + 3) * puyo_size,
+        c.SDL_WINDOW_ALWAYS_ON_TOP & c.SDL_WINDOW_VULKAN,
     ) orelse return error.SDL;
     errdefer c.SDL_DestroyWindow(g_window);
 
-    g_surface = c.SDL_GetWindowSurface(g_window) orelse return error.SDL;
-    errdefer c.SDL_FreeSurface(g_surface);
+    g_renderer = c.SDL_CreateRenderer(g_window, -1, c.SDL_RENDERER_ACCELERATED) orelse return error.SDL;
+    errdefer c.SDL_DestroyRenderer(g_renderer);
 
     const img_flags = c.IMG_INIT_PNG;
-    if (c.IMG_Init(img_flags) & img_flags != img_flags) return error.IMG;
-
-    g_puyo_surface = try getPuyoSurface(g_surface.*.format);
+    if (c.IMG_Init(img_flags) & img_flags != img_flags) return imgError();
+    defer c.IMG_Quit();
+    g_puyo_texture = try getPuyoTexture(g_renderer);
 }
 
 /// Call the following after:
 /// ```
-/// defer c.SDL_FreeSurface(g_puyo_surface);
+/// defer c.SDL_DestroyTexture(g_puyo_texture);
 /// ```
-fn getPuyoSurface(format: *c.SDL_PixelFormat) GameError!*c.SDL_Surface {
-    const tmp_surface = c.IMG_Load("resources/puyo_sozai.png") orelse return error.IMG;
+fn getPuyoTexture(renderer: *c.SDL_Renderer) GameError!*c.SDL_Texture {
+    const tmp_surface = c.IMG_Load("resources/puyo_sozai.png") orelse return imgError();
     defer c.SDL_FreeSurface(tmp_surface);
-    return c.SDL_ConvertSurface(tmp_surface, format, 0) orelse error.SDL;
+    return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse error.SDL;
 }
