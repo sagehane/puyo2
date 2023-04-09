@@ -167,7 +167,7 @@ fn setup() GameError!void {
     g_renderer = c.SDL_CreateRenderer(g_window, -1, c.SDL_RENDERER_ACCELERATED) orelse return error.SDL;
     errdefer c.SDL_DestroyRenderer(g_renderer);
 
-    const img_flags = c.IMG_INIT_PNG;
+    const img_flags = 0;
     if (c.IMG_Init(img_flags) & img_flags != img_flags) return imgError();
     defer c.IMG_Quit();
     g_puyo_texture = try getPuyoTexture(g_renderer);
@@ -178,7 +178,7 @@ fn setup() GameError!void {
 /// defer c.SDL_DestroyTexture(g_puyo_texture);
 /// ```
 fn getPuyoTexture(renderer: *c.SDL_Renderer) GameError!*c.SDL_Texture {
-    const tmp_surface = c.IMG_Load("resources/puyo_sozai.png") orelse return imgError();
+    const tmp_surface = c.IMG_Load("resources/puyo_sozai.qoi") orelse return imgError();
     defer c.SDL_FreeSurface(tmp_surface);
     return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse error.SDL;
 }
