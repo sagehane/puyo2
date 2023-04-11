@@ -20,6 +20,11 @@ fn sdlError() GameError {
 
 const puyo_size = 32;
 
+const Coord = packed struct(u64) {
+    x: i32 = 0,
+    y: i32 = 0,
+};
+
 const Game = struct {
     puyo_texture: *c.SDL_Texture,
     renderer: *c.SDL_Renderer,
@@ -58,6 +63,58 @@ const Game = struct {
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.window);
         c.SDL_Quit();
+    }
+
+    fn renderGrid(self: Game, coord: Coord) GameError!void {
+        const w = puyo.grid_width;
+        const h = puyo.grid_height - 1;
+        const wall = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .wall })];
+        const background = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .empty })];
+
+        var y: c_int = coord.y;
+        while (y < coord.y + h) : (y += 1) {
+            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(coord.x, y, .{})) != 0) return sdlError();
+
+            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(coord.x + 7, y, .{})) != 0) return sdlError();
+
+            var x: c_int = coord.x;
+            while (x < coord.x + w) : (x += 1) {
+                if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, background, &tileToRect(x + 1, y, .{})) != 0) return sdlError();
+            }
+        }
+
+        var x: c_int = coord.x;
+        while (x < coord.x + w + 2) : (x += 1) {
+            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(x, coord.y + h, .{})) != 0) return sdlError();
+        }
+    }
+
+    /// TODO: Add logic for printing with masks
+    /// TODO: Don't let puyos render above the grid
+    fn renderTsumo(self: Game, tsumo: puyo.Tsumo, coord: Coord) GameError!void {
+        var x: i32 = tsumo.coord.x + coord.x + 1;
+        var y: i32 = tsumo.coord.y + coord.y - 1;
+
+        if (c.SDL_RenderCopy(
+            self.renderer,
+            self.puyo_texture,
+            &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_1 })],
+            &tileToRect(x, y, .{}),
+        ) != 0) return sdlError();
+
+        switch (tsumo.orientation) {
+            .default => y -= 1,
+            .left => x -= 1,
+            .reverse => y += 1,
+            .right => x += 1,
+        }
+
+        if (c.SDL_RenderCopy(
+            self.renderer,
+            self.puyo_texture,
+            &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_2 })],
+            &tileToRect(x, y, .{}),
+        ) != 0) return sdlError();
     }
 };
 
@@ -156,8 +213,8 @@ fn sdl_main() GameError!void {
         // TODO: Check docs
         _ = c.SDL_SetRenderDrawColor(game.renderer, 0x00, 0x00, 0x00, 0x00);
         _ = c.SDL_RenderClear(game.renderer);
-        try initGrid(game);
-        try renderTsumo(game, tsumo);
+        try game.renderGrid(.{ .x = 1, .y = 1 });
+        try game.renderTsumo(tsumo, .{ .x = 1, .y = 1 });
         c.SDL_RenderPresent(game.renderer);
     }
 }
@@ -170,54 +227,4 @@ fn getPuyoTexture(renderer: *c.SDL_Renderer) GameError!*c.SDL_Texture {
     const tmp_surface = c.IMG_Load("resources/puyo_sozai.qoi") orelse return imgError();
     defer c.SDL_FreeSurface(tmp_surface);
     return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse sdlError();
-}
-
-fn initGrid(game: Game) GameError!void {
-    const wall = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .wall })];
-    const background = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .empty })];
-
-    var y: c_int = 0;
-    while (y < 12) : (y += 1) {
-        if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, wall, &tileToRect(0 + 1, y + 1, .{})) != 0) return sdlError();
-
-        if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, wall, &tileToRect(7 + 1, y + 1, .{})) != 0) return sdlError();
-
-        var x: c_int = 0;
-        while (x < 6) : (x += 1) {
-            if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, background, &tileToRect(x + 2, y + 1, .{})) != 0) return sdlError();
-        }
-    }
-
-    var x: c_int = 0;
-    while (x < 8) : (x += 1) {
-        if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, wall, &tileToRect(x + 1, 12 + 1, .{})) != 0) return sdlError();
-    }
-}
-
-/// TODO: Add logic for printing with masks
-/// TODO: Don't let puyos render above the grid
-fn renderTsumo(game: Game, tsumo: puyo.Tsumo) GameError!void {
-    var x: i8 = tsumo.coord.x + 2;
-    var y: i8 = tsumo.coord.y;
-
-    if (c.SDL_RenderCopy(
-        game.renderer,
-        game.puyo_texture,
-        &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_1 })],
-        &tileToRect(x, y, .{}),
-    ) != 0) return sdlError();
-
-    switch (tsumo.orientation) {
-        .default => y -= 1,
-        .left => x -= 1,
-        .reverse => y += 1,
-        .right => x += 1,
-    }
-
-    if (c.SDL_RenderCopy(
-        game.renderer,
-        game.puyo_texture,
-        &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_2 })],
-        &tileToRect(x, y, .{}),
-    ) != 0) return sdlError();
 }
