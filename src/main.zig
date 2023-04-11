@@ -101,6 +101,8 @@ fn sdl_main() GameError!void {
         const keymod = c.SDL_GetModState();
         const key_states = c.SDL_GetKeyboardState(null);
 
+        // TODO: The screen should close only if Q was pressed this frame
+        // TODO: Basically, compare with the previous keyboard state
         if (keymod & c.KMOD_CTRL != 0 and key_states[c.SDL_SCANCODE_Q] != 0)
             break :outer;
 
