@@ -113,7 +113,6 @@ fn sdl_main() GameError!void {
 
     c.SDL_RenderPresent(g_renderer);
 
-    var ctrl_mask: u2 = 0b00;
     var event: c.SDL_Event = undefined;
     outer: while (true) {
         // TODO: https://lazyfoo.net/tutorials/SDL/25_capping_frame_rate/index.php
@@ -122,23 +121,14 @@ fn sdl_main() GameError!void {
         while (c.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
                 c.SDL_QUIT => break :outer,
-                c.SDL_KEYDOWN => {
-                    switch (event.key.keysym.sym) {
-                        c.SDLK_LCTRL => ctrl_mask |= 0b01,
-                        c.SDLK_RCTRL => ctrl_mask |= 0b10,
-                        c.SDLK_q => if (ctrl_mask != 0) break :outer,
-                        else => {},
-                    }
-                },
-                c.SDL_KEYUP => {
-                    switch (event.key.keysym.sym) {
-                        c.SDLK_LCTRL => ctrl_mask ^= 0b01,
-                        c.SDLK_RCTRL => ctrl_mask ^= 0b10,
-                        else => {},
-                    }
-                },
                 else => {},
             }
+
+            const keymod = c.SDL_GetModState();
+            const key_states = c.SDL_GetKeyboardState(null);
+
+            if (keymod & c.KMOD_CTRL != 0 and key_states[c.SDL_SCANCODE_Q] != 0)
+                break :outer;
         }
     }
 }
