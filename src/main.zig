@@ -97,11 +97,15 @@ pub fn main() void {
 
         @panic("TODO: Think of a better message\n");
     };
+    defer c.SDL_Quit();
 }
 
+/// Call the following after:
+/// ```
+/// defer c.SDL_Quit();
+/// ```
 fn sdl_main() GameError!void {
     try setup();
-    defer c.SDL_Quit();
     defer c.SDL_DestroyWindow(g_window);
     defer c.SDL_DestroyTexture(g_puyo_texture);
 
