@@ -37,14 +37,14 @@ pub const Sprite = packed struct(u7) {
 pub const Tsumo = packed struct(u16) {
     colour_1: Colour,
     colour_2: Colour,
-    orientation: Orientation = .default,
+    orientation: Orientation = .up,
     /// Coord of colour_1
     coord: Coord = .{ .x = 2, .y = 0 },
 
     const Orientation = enum(u2) {
-        default = 0b00,
+        up = 0b00,
         left = 0b01,
-        reverse = 0b10,
+        down = 0b10,
         right = 0b11,
     };
 
@@ -59,37 +59,34 @@ pub const Tsumo = packed struct(u16) {
     }
 
     pub fn moveDown(self: *Tsumo) void {
-        if (self.coord.y < grid_height - 1)
+        if (self.coord.y < grid_height - (@as(u8, @boolToInt(self.orientation == .down)) + 1))
             self.coord.y += 1;
     }
 
     /// TODO: Add logic for making the tsumo "pop" up depending on the board
-    pub fn rotateClockwise(self: *Tsumo) void {
+    inline fn adjustCoord(self: *Tsumo) void {
         switch (self.orientation) {
-            .default => if (self.coord.x == grid_width - 1) {
-                self.coord.x -= 1;
-            },
-            .reverse => if (self.coord.x == 0) {
+            .left => if (self.coord.x == 0) {
                 self.coord.x += 1;
+            },
+            .down => if (self.coord.y == grid_height - 1) {
+                self.coord.y -= 1;
+            },
+            .right => if (self.coord.x == grid_width - 1) {
+                self.coord.x -= 1;
             },
             else => {},
         }
+    }
 
+    pub fn rotateClockwise(self: *Tsumo) void {
         self.orientation = @intToEnum(Orientation, @enumToInt(self.orientation) -% 1);
+        self.adjustCoord();
     }
 
     pub fn rotateCounterClockwise(self: *Tsumo) void {
-        switch (self.orientation) {
-            .default => if (self.coord.x == 0) {
-                self.coord.x += 1;
-            },
-            .reverse => if (self.coord.x == grid_width - 1) {
-                self.coord.x -= 1;
-            },
-            else => {},
-        }
-
         self.orientation = @intToEnum(Orientation, @enumToInt(self.orientation) +% 1);
+        self.adjustCoord();
     }
 };
 

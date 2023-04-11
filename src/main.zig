@@ -103,9 +103,9 @@ const Game = struct {
         ) != 0) return sdlError();
 
         switch (tsumo.orientation) {
-            .default => y -= 1,
+            .up => y -= 1,
             .left => x -= 1,
-            .reverse => y += 1,
+            .down => y += 1,
             .right => x += 1,
         }
 
