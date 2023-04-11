@@ -109,13 +109,7 @@ fn sdl_main() GameError!void {
     defer c.SDL_DestroyWindow(g_window);
     defer c.SDL_DestroyTexture(g_puyo_texture);
 
-    // TODO: Check docs
-    _ = c.SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0x00);
-    _ = c.SDL_RenderClear(g_renderer);
-
-    try initGrid(g_renderer);
-
-    c.SDL_RenderPresent(g_renderer);
+    var tsumo: packed struct(u16) { x: u8, y: u8 } = .{ .x = 3, .y = 0 };
 
     var event: c.SDL_Event = undefined;
     outer: while (true) {
@@ -127,13 +121,39 @@ fn sdl_main() GameError!void {
                 c.SDL_QUIT => break :outer,
                 else => {},
             }
-
-            const keymod = c.SDL_GetModState();
-            const key_states = c.SDL_GetKeyboardState(null);
-
-            if (keymod & c.KMOD_CTRL != 0 and key_states[c.SDL_SCANCODE_Q] != 0)
-                break :outer;
         }
+
+        const keymod = c.SDL_GetModState();
+        const key_states = c.SDL_GetKeyboardState(null);
+
+        if (keymod & c.KMOD_CTRL != 0 and key_states[c.SDL_SCANCODE_Q] != 0)
+            break :outer;
+
+        // TODO: Slow down movement and handle cases when both keys are held simultaneously
+        if (key_states[c.SDL_SCANCODE_W] != 0 and tsumo.y != 0) {
+            tsumo.y -|= 1;
+        }
+        if (key_states[c.SDL_SCANCODE_A] != 0 and tsumo.x != 0) {
+            tsumo.x -|= 1;
+        }
+        if (key_states[c.SDL_SCANCODE_S] != 0 and tsumo.y < puyo.Data.grid_height - 1) {
+            tsumo.y += 1;
+        }
+        if (key_states[c.SDL_SCANCODE_D] != 0 and tsumo.x < puyo.Data.grid_width - 1) {
+            tsumo.x += 1;
+        }
+
+        // TODO: Check docs
+        _ = c.SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0x00);
+        _ = c.SDL_RenderClear(g_renderer);
+        try initGrid(g_renderer);
+        _ = c.SDL_RenderCopy(
+            g_renderer,
+            g_puyo_texture,
+            &sprite_table[@bitCast(u7, puyo.Data.Sprite{ .colour = .red })],
+            &tileToRect(tsumo.x + 2, tsumo.y, .{}),
+        );
+        c.SDL_RenderPresent(g_renderer);
     }
 }
 
@@ -158,7 +178,8 @@ fn setup() GameError!void {
     ) orelse return error.SDL;
     errdefer c.SDL_DestroyWindow(g_window);
 
-    g_renderer = c.SDL_CreateRenderer(g_window, -1, c.SDL_RENDERER_ACCELERATED) orelse return error.SDL;
+    // TODO: Look into VSync
+    g_renderer = c.SDL_CreateRenderer(g_window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse return error.SDL;
     errdefer c.SDL_DestroyRenderer(g_renderer);
 
     const img_flags = 0;
