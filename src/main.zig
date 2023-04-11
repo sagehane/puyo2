@@ -4,22 +4,62 @@ const c = @import("c.zig");
 const puyo = @import("puyo.zig");
 
 const GameError = error{
-    SDL,
-    IMG,
+    C,
     Other,
 };
 
 fn imgError() GameError {
     std.debug.print("IMG Error: {s}\n", .{c.IMG_GetError()});
-    return error.IMG;
+    return error.C;
+}
+
+fn sdlError() GameError {
+    std.debug.print("SDL Error: {s}\n", .{c.SDL_GetError()});
+    return error.C;
 }
 
 const puyo_size = 32;
 
-// Some global variables
-var g_renderer: *c.SDL_Renderer = undefined;
-var g_window: *c.SDL_Window = undefined;
-var g_puyo_texture: *c.SDL_Texture = undefined;
+const Game = struct {
+    puyo_texture: *c.SDL_Texture,
+    renderer: *c.SDL_Renderer,
+    window: *c.SDL_Window,
+
+    fn init() GameError!Game {
+        var game: Game = undefined;
+
+        if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return sdlError();
+        errdefer c.SDL_Quit();
+
+        game.window = c.SDL_CreateWindow(
+            "Puyo Puyo",
+            c.SDL_WINDOWPOS_UNDEFINED,
+            c.SDL_WINDOWPOS_UNDEFINED,
+            (2 * (8 + 3) + 1) * puyo_size,
+            (1 + 13 + 3) * puyo_size,
+            c.SDL_WINDOW_ALWAYS_ON_TOP & c.SDL_WINDOW_VULKAN,
+        ) orelse return sdlError();
+        errdefer c.SDL_DestroyWindow(game.window);
+
+        // TODO: Look into VSync
+        game.renderer = c.SDL_CreateRenderer(game.window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse return sdlError();
+        errdefer c.SDL_DestroyRenderer(game.renderer);
+
+        const img_flags = 0;
+        if (c.IMG_Init(img_flags) & img_flags != img_flags) return imgError();
+        defer c.IMG_Quit();
+        game.puyo_texture = try getPuyoTexture(game.renderer);
+
+        return game;
+    }
+
+    fn deinit(self: Game) void {
+        c.SDL_DestroyTexture(self.puyo_texture);
+        c.SDL_DestroyRenderer(self.renderer);
+        c.SDL_DestroyWindow(self.window);
+        c.SDL_Quit();
+    }
+};
 
 inline fn tileToRect(
     x: c_int,
@@ -63,32 +103,21 @@ test {
 }
 
 pub fn main() void {
-    sdl_main() catch |err| {
-        switch (err) {
-            error.SDL => std.debug.print("SDL Error: {s}\n", .{c.SDL_GetError()}),
-            error.IMG => {},
-            error.Other => {},
-        }
-
+    sdl_main() catch {
         @panic("TODO: Think of a better message\n");
     };
-    defer c.SDL_Quit();
 }
 
-/// Call the following after:
-/// ```
-/// defer c.SDL_Quit();
-/// ```
 fn sdl_main() GameError!void {
-    try setup();
-    defer c.SDL_DestroyWindow(g_window);
-    defer c.SDL_DestroyTexture(g_puyo_texture);
+    var game = try Game.init();
+    defer game.deinit();
 
     var tsumo = puyo.Tsumo{ .colour_1 = .red, .colour_2 = .blue };
 
     var event: c.SDL_Event = undefined;
     outer: while (true) {
         // TODO: https://lazyfoo.net/tutorials/SDL/25_capping_frame_rate/index.php
+        // or https://www.gafferongames.com/post/fix_your_timestep/
         c.SDL_Delay(1000 / 60);
 
         while (c.SDL_PollEvent(&event) != 0) {
@@ -125,43 +154,12 @@ fn sdl_main() GameError!void {
 
         // TODO: Make a separate texture/window/whatever for the grid
         // TODO: Check docs
-        _ = c.SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0x00);
-        _ = c.SDL_RenderClear(g_renderer);
-        try initGrid(g_renderer);
-        try renderTsumo(g_renderer, tsumo);
-        c.SDL_RenderPresent(g_renderer);
+        _ = c.SDL_SetRenderDrawColor(game.renderer, 0x00, 0x00, 0x00, 0x00);
+        _ = c.SDL_RenderClear(game.renderer);
+        try initGrid(game);
+        try renderTsumo(game, tsumo);
+        c.SDL_RenderPresent(game.renderer);
     }
-}
-
-/// Call the following after:
-/// ```
-/// defer c.SDL_Quit();
-/// defer c.SDL_DestroyWindow(g_window);
-/// defer c.SDL_DestroyRenderer(g_renderer);
-/// defer c.SDL_DestroyTexture(g_puyo_texture);
-/// ```
-fn setup() GameError!void {
-    if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDL;
-    errdefer c.SDL_Quit();
-
-    g_window = c.SDL_CreateWindow(
-        "Puyo Puyo",
-        c.SDL_WINDOWPOS_UNDEFINED,
-        c.SDL_WINDOWPOS_UNDEFINED,
-        (2 * (8 + 3) + 1) * puyo_size,
-        (1 + 13 + 3) * puyo_size,
-        c.SDL_WINDOW_ALWAYS_ON_TOP & c.SDL_WINDOW_VULKAN,
-    ) orelse return error.SDL;
-    errdefer c.SDL_DestroyWindow(g_window);
-
-    // TODO: Look into VSync
-    g_renderer = c.SDL_CreateRenderer(g_window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse return error.SDL;
-    errdefer c.SDL_DestroyRenderer(g_renderer);
-
-    const img_flags = 0;
-    if (c.IMG_Init(img_flags) & img_flags != img_flags) return imgError();
-    defer c.IMG_Quit();
-    g_puyo_texture = try getPuyoTexture(g_renderer);
 }
 
 /// Call the following after:
@@ -171,43 +169,43 @@ fn setup() GameError!void {
 fn getPuyoTexture(renderer: *c.SDL_Renderer) GameError!*c.SDL_Texture {
     const tmp_surface = c.IMG_Load("resources/puyo_sozai.qoi") orelse return imgError();
     defer c.SDL_FreeSurface(tmp_surface);
-    return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse error.SDL;
+    return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse sdlError();
 }
 
-fn initGrid(renderer: *c.SDL_Renderer) GameError!void {
+fn initGrid(game: Game) GameError!void {
     const wall = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .wall })];
     const background = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .empty })];
 
     var y: c_int = 0;
     while (y < 12) : (y += 1) {
-        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &tileToRect(0 + 1, y + 1, .{})) != 0) return error.SDL;
+        if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, wall, &tileToRect(0 + 1, y + 1, .{})) != 0) return sdlError();
 
-        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &tileToRect(7 + 1, y + 1, .{})) != 0) return error.SDL;
+        if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, wall, &tileToRect(7 + 1, y + 1, .{})) != 0) return sdlError();
 
         var x: c_int = 0;
         while (x < 6) : (x += 1) {
-            if (c.SDL_RenderCopy(renderer, g_puyo_texture, background, &tileToRect(x + 2, y + 1, .{})) != 0) return error.SDL;
+            if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, background, &tileToRect(x + 2, y + 1, .{})) != 0) return sdlError();
         }
     }
 
     var x: c_int = 0;
     while (x < 8) : (x += 1) {
-        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &tileToRect(x + 1, 12 + 1, .{})) != 0) return error.SDL;
+        if (c.SDL_RenderCopy(game.renderer, game.puyo_texture, wall, &tileToRect(x + 1, 12 + 1, .{})) != 0) return sdlError();
     }
 }
 
 /// TODO: Add logic for printing with masks
 /// TODO: Don't let puyos render above the grid
-fn renderTsumo(renderer: *c.SDL_Renderer, tsumo: puyo.Tsumo) GameError!void {
+fn renderTsumo(game: Game, tsumo: puyo.Tsumo) GameError!void {
     var x: i8 = tsumo.coord.x + 2;
     var y: i8 = tsumo.coord.y;
 
     if (c.SDL_RenderCopy(
-        renderer,
-        g_puyo_texture,
+        game.renderer,
+        game.puyo_texture,
         &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_1 })],
         &tileToRect(x, y, .{}),
-    ) != 0) return error.SDL;
+    ) != 0) return sdlError();
 
     switch (tsumo.orientation) {
         .default => y -= 1,
@@ -217,9 +215,9 @@ fn renderTsumo(renderer: *c.SDL_Renderer, tsumo: puyo.Tsumo) GameError!void {
     }
 
     if (c.SDL_RenderCopy(
-        renderer,
-        g_puyo_texture,
+        game.renderer,
+        game.puyo_texture,
         &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_2 })],
         &tileToRect(x, y, .{}),
-    ) != 0) return error.SDL;
+    ) != 0) return sdlError();
 }
