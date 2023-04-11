@@ -37,6 +37,9 @@ inline fn tileToRect(
 const sprite_table = blk: {
     var table: [8 * 16]c.SDL_Rect = undefined;
 
+    // The last index is an empty background
+    table[std.math.maxInt(u7)] = tileToRect(5, 15, .{});
+
     table[0] = tileToRect(5, 1, .{});
     table[7] = tileToRect(5, 0, .{});
 
@@ -57,34 +60,6 @@ test {
     std.testing.refAllDecls(@This());
 
     _ = puyo;
-}
-
-fn initGrid(renderer: *c.SDL_Renderer) GameError!void {
-    const wall = &sprite_table[@bitCast(u7, puyo.Data.Sprite{ .colour = .wall })];
-    const background = &sprite_table[@bitCast(u7, puyo.Data.Sprite{ .colour = .empty })];
-
-    var rect: c.SDL_Rect = undefined;
-
-    var y: c_int = 0;
-    while (y < 12) : (y += 1) {
-        rect = tileToRect(0 + 1, y + 1, .{});
-        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &rect) != 0) return error.SDL;
-
-        rect = tileToRect(7 + 1, y + 1, .{});
-        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &rect) != 0) return error.SDL;
-
-        var x: c_int = 0;
-        while (x < 6) : (x += 1) {
-            rect = tileToRect(x + 2, y + 1, .{});
-            if (c.SDL_RenderCopy(renderer, g_puyo_texture, background, &rect) != 0) return error.SDL;
-        }
-    }
-
-    var x: c_int = 0;
-    while (x < 8) : (x += 1) {
-        rect = tileToRect(x + 1, 12 + 1, .{});
-        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &rect) != 0) return error.SDL;
-    }
 }
 
 pub fn main() void {
@@ -109,7 +84,7 @@ fn sdl_main() GameError!void {
     defer c.SDL_DestroyWindow(g_window);
     defer c.SDL_DestroyTexture(g_puyo_texture);
 
-    var tsumo: packed struct(u16) { x: u8, y: u8 } = .{ .x = 3, .y = 0 };
+    var tsumo = puyo.Tsumo{ .colour_1 = .red, .colour_2 = .blue };
 
     var event: c.SDL_Event = undefined;
     outer: while (true) {
@@ -130,29 +105,28 @@ fn sdl_main() GameError!void {
             break :outer;
 
         // TODO: Slow down movement and handle cases when both keys are held simultaneously
-        if (key_states[c.SDL_SCANCODE_W] != 0 and tsumo.y != 0) {
-            tsumo.y -|= 1;
+        if (key_states[c.SDL_SCANCODE_A] != 0) {
+            tsumo.moveLeft();
         }
-        if (key_states[c.SDL_SCANCODE_A] != 0 and tsumo.x != 0) {
-            tsumo.x -|= 1;
+        if (key_states[c.SDL_SCANCODE_D] != 0) {
+            tsumo.moveRight();
         }
-        if (key_states[c.SDL_SCANCODE_S] != 0 and tsumo.y < puyo.Data.grid_height - 1) {
-            tsumo.y += 1;
+        if (key_states[c.SDL_SCANCODE_O] != 0) {
+            tsumo.rotateCounterClockwise();
         }
-        if (key_states[c.SDL_SCANCODE_D] != 0 and tsumo.x < puyo.Data.grid_width - 1) {
-            tsumo.x += 1;
+        if (key_states[c.SDL_SCANCODE_P] != 0) {
+            tsumo.rotateClockwise();
+        }
+        if (key_states[c.SDL_SCANCODE_S] != 0) {
+            tsumo.moveDown();
         }
 
+        // TODO: Make a separate texture/window/whatever for the grid
         // TODO: Check docs
         _ = c.SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0x00);
         _ = c.SDL_RenderClear(g_renderer);
         try initGrid(g_renderer);
-        _ = c.SDL_RenderCopy(
-            g_renderer,
-            g_puyo_texture,
-            &sprite_table[@bitCast(u7, puyo.Data.Sprite{ .colour = .red })],
-            &tileToRect(tsumo.x + 2, tsumo.y, .{}),
-        );
+        try renderTsumo(g_renderer, tsumo);
         c.SDL_RenderPresent(g_renderer);
     }
 }
@@ -196,4 +170,54 @@ fn getPuyoTexture(renderer: *c.SDL_Renderer) GameError!*c.SDL_Texture {
     const tmp_surface = c.IMG_Load("resources/puyo_sozai.qoi") orelse return imgError();
     defer c.SDL_FreeSurface(tmp_surface);
     return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse error.SDL;
+}
+
+fn initGrid(renderer: *c.SDL_Renderer) GameError!void {
+    const wall = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .wall })];
+    const background = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .empty })];
+
+    var y: c_int = 0;
+    while (y < 12) : (y += 1) {
+        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &tileToRect(0 + 1, y + 1, .{})) != 0) return error.SDL;
+
+        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &tileToRect(7 + 1, y + 1, .{})) != 0) return error.SDL;
+
+        var x: c_int = 0;
+        while (x < 6) : (x += 1) {
+            if (c.SDL_RenderCopy(renderer, g_puyo_texture, background, &tileToRect(x + 2, y + 1, .{})) != 0) return error.SDL;
+        }
+    }
+
+    var x: c_int = 0;
+    while (x < 8) : (x += 1) {
+        if (c.SDL_RenderCopy(renderer, g_puyo_texture, wall, &tileToRect(x + 1, 12 + 1, .{})) != 0) return error.SDL;
+    }
+}
+
+/// TODO: Add logic for printing with masks
+/// TODO: Don't let puyos render above the grid
+fn renderTsumo(renderer: *c.SDL_Renderer, tsumo: puyo.Tsumo) GameError!void {
+    var x: i8 = tsumo.coord.x + 2;
+    var y: i8 = tsumo.coord.y;
+
+    if (c.SDL_RenderCopy(
+        renderer,
+        g_puyo_texture,
+        &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_1 })],
+        &tileToRect(x, y, .{}),
+    ) != 0) return error.SDL;
+
+    switch (tsumo.orientation) {
+        .default => y -= 1,
+        .left => x -= 1,
+        .reverse => y += 1,
+        .right => x += 1,
+    }
+
+    if (c.SDL_RenderCopy(
+        renderer,
+        g_puyo_texture,
+        &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_2 })],
+        &tileToRect(x, y, .{}),
+    ) != 0) return error.SDL;
 }
