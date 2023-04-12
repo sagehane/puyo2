@@ -171,6 +171,8 @@ fn sdl_main() GameError!void {
 
     var tsumo = puyo.Tsumo{ .colour_1 = .red, .colour_2 = .blue };
 
+    // Held keys of the previous frame
+    var prev_key_mask: u8 = 0;
     var event: c.SDL_Event = undefined;
     outer: while (true) {
         // TODO: https://lazyfoo.net/tutorials/SDL/25_capping_frame_rate/index.php
@@ -187,25 +189,40 @@ fn sdl_main() GameError!void {
         const keymod = c.SDL_GetModState();
         const key_states = c.SDL_GetKeyboardState(null);
 
+        // Currently held keys
+        const key_mask =
+            key_states[c.SDL_SCANCODE_Q] |
+            key_states[c.SDL_SCANCODE_A] << 1 |
+            key_states[c.SDL_SCANCODE_S] << 2 |
+            key_states[c.SDL_SCANCODE_D] << 3 |
+            key_states[c.SDL_SCANCODE_O] << 4 |
+            key_states[c.SDL_SCANCODE_P] << 5;
+        defer prev_key_mask = key_mask;
+
+        // Keys held for the first time
+        const new_key_mask = key_mask & ~prev_key_mask;
+
         // TODO: The screen should close only if Q was pressed this frame
         // TODO: Basically, compare with the previous keyboard state
-        if (keymod & c.KMOD_CTRL != 0 and key_states[c.SDL_SCANCODE_Q] != 0)
+        if (keymod & c.KMOD_CTRL != 0 and new_key_mask & 1 != 0)
             break :outer;
 
-        // TODO: Slow down movement and handle cases when both keys are held simultaneously
-        if (key_states[c.SDL_SCANCODE_A] != 0) {
-            tsumo.moveLeft();
-        }
-        if (key_states[c.SDL_SCANCODE_D] != 0) {
-            tsumo.moveRight();
-        }
-        if (key_states[c.SDL_SCANCODE_O] != 0) {
+        // TODO: Consider if it should be legal to press both O and P
+        if (new_key_mask & 1 << 4 != 0) {
             tsumo.rotateCounterClockwise();
         }
-        if (key_states[c.SDL_SCANCODE_P] != 0) {
+        if (new_key_mask & 1 << 5 != 0) {
             tsumo.rotateClockwise();
         }
-        if (key_states[c.SDL_SCANCODE_S] != 0) {
+
+        // TODO: Slow down movement
+        switch (key_mask & 0b1010) {
+            1 << 1 => tsumo.moveLeft(),
+            1 << 3 => tsumo.moveRight(),
+            else => {},
+        }
+
+        if (key_mask & 1 << 2 != 0) {
             tsumo.moveDown();
         }
 
