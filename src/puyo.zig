@@ -1,3 +1,6 @@
+const std = @import("std");
+const testing = std.testing;
+
 pub const grid_width = 6;
 pub const grid_height = 13;
 
@@ -31,6 +34,17 @@ pub const Sprite = packed struct(u7) {
         left: bool = false,
         right: bool = false,
     };
+
+    test {
+        try testing.expectEqual(0x00, @bitCast(u7, Sprite{ .colour = .empty }));
+        try testing.expectEqual(0x10, @bitCast(u7, Sprite{ .colour = .red }));
+        try testing.expectEqual(0x20, @bitCast(u7, Sprite{ .colour = .green }));
+        try testing.expectEqual(0x20, @bitCast(u7, Sprite{ .colour = .blue }));
+        try testing.expectEqual(0x30, @bitCast(u7, Sprite{ .colour = .yellow }));
+        try testing.expectEqual(0x40, @bitCast(u7, Sprite{ .colour = .purple }));
+        try testing.expectEqual(0x50, @bitCast(u7, Sprite{ .colour = .garbage }));
+        try testing.expectEqual(0x60, @bitCast(u7, Sprite{ .colour = .wall }));
+    }
 };
 
 /// TODO: Consider scrapping this and handling it on SDL's side
@@ -90,18 +104,22 @@ pub const Tsumo = packed struct(u16) {
     }
 };
 
-pub const Data = struct {
-    grid: [grid_height][grid_width]Colour,
+pub const Puyo = struct {
+    grid: [grid_height][grid_width]Sprite = [1][grid_width]Sprite{[1]Sprite{.{ .colour = .empty }} ** grid_width} ** grid_height,
 
-    pub fn initGrid(
-        comptime SurfaceType: type,
-        surface: SurfaceType,
-        image: SurfaceType,
-    ) !void {
-        for (0..12) |y| {
-            for (0..6) |x| {
-                try surface.SDL_BlitSurface(image, .{ .x = x, .y = y });
-            }
-        }
+    //pub fn initGrid(
+    //    comptime SurfaceType: type,
+    //    surface: SurfaceType,
+    //    image: SurfaceType,
+    //) !void {
+    //    for (0..12) |y| {
+    //        for (0..6) |x| {
+    //            try surface.SDL_BlitSurface(image, .{ .x = x, .y = y });
+    //        }
+    //    }
+    //}
+
+    pub fn getSprite(self: Puyo, coord: Coord) Sprite {
+        return self.grid[coord.y][coord.x];
     }
 };

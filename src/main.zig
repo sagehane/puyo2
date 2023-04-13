@@ -3,6 +3,10 @@ const std = @import("std");
 const c = @import("c.zig");
 const puyo = @import("puyo.zig");
 
+test {
+    std.testing.refAllDecls(puyo);
+}
+
 const GameError = error{
     C,
     Other,
@@ -26,12 +30,14 @@ const Coord = packed struct(u64) {
 };
 
 const Game = struct {
+    puyo: puyo.Puyo = .{},
     puyo_texture: *c.SDL_Texture,
     renderer: *c.SDL_Renderer,
     window: *c.SDL_Window,
 
     fn init() GameError!Game {
         var game: Game = undefined;
+        game.puyo = .{};
 
         if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return sdlError();
         errdefer c.SDL_Quit();
@@ -66,26 +72,29 @@ const Game = struct {
     }
 
     fn renderGrid(self: Game, coord: Coord) GameError!void {
-        const w = puyo.grid_width;
-        const h = puyo.grid_height - 1;
-        const wall = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .wall })];
-        const background = &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = .empty })];
+        const wall = &spriteToRect(puyo.Sprite{ .colour = .wall });
+        const background = &spriteToRect(puyo.Sprite{ .colour = .empty });
 
-        var y: c_int = coord.y;
-        while (y < coord.y + h) : (y += 1) {
-            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(coord.x, y, .{})) != 0) return sdlError();
+        var y: i32 = 0;
+        while (y < puyo.grid_height - 1) : (y += 1) {
+            const y_offset = y + coord.y;
+            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(coord.x, y_offset, .{})) != 0) return sdlError();
 
-            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(coord.x + 7, y, .{})) != 0) return sdlError();
+            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(coord.x + 7, y_offset, .{})) != 0) return sdlError();
 
-            var x: c_int = coord.x;
-            while (x < coord.x + w) : (x += 1) {
-                if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, background, &tileToRect(x + 1, y, .{})) != 0) return sdlError();
+            var x: i32 = 0;
+            while (x < puyo.grid_width) : (x += 1) {
+                const rect = &tileToRect(x + coord.x + 1, y_offset, .{});
+                if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, background, rect) != 0) return sdlError();
+
+                const sprite = self.puyo.getSprite(.{ .x = @intCast(u4, x), .y = @intCast(u4, y) });
+                if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, &spriteToRect(sprite), rect) != 0) return sdlError();
             }
         }
 
         var x: c_int = coord.x;
-        while (x < coord.x + w + 2) : (x += 1) {
-            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(x, coord.y + h, .{})) != 0) return sdlError();
+        while (x < coord.x + puyo.grid_width + 2) : (x += 1) {
+            if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, wall, &tileToRect(x, coord.y + puyo.grid_height - 1, .{})) != 0) return sdlError();
         }
     }
 
@@ -98,7 +107,7 @@ const Game = struct {
         if (c.SDL_RenderCopy(
             self.renderer,
             self.puyo_texture,
-            &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_1 })],
+            &spriteToRect(puyo.Sprite{ .colour = tsumo.colour_1 }),
             &tileToRect(x, y, .{}),
         ) != 0) return sdlError();
 
@@ -112,7 +121,7 @@ const Game = struct {
         if (c.SDL_RenderCopy(
             self.renderer,
             self.puyo_texture,
-            &sprite_table[@bitCast(u7, puyo.Sprite{ .colour = tsumo.colour_2 })],
+            &spriteToRect(puyo.Sprite{ .colour = tsumo.colour_2 }),
             &tileToRect(x, y, .{}),
         ) != 0) return sdlError();
     }
@@ -131,8 +140,14 @@ inline fn tileToRect(
     };
 }
 
+inline fn spriteToRect(sprite: puyo.Sprite) c.SDL_Rect {
+    return sprite_table[@bitCast(u7, sprite)];
+}
+
 const sprite_table = blk: {
-    var table: [8 * 16]c.SDL_Rect = undefined;
+    const w = 0x08;
+    const h = 0x10;
+    var table: [w * h]c.SDL_Rect = undefined;
 
     // The last index is an empty background
     table[std.math.maxInt(u7)] = tileToRect(5, 15, .{});
@@ -141,23 +156,13 @@ const sprite_table = blk: {
     table[7] = tileToRect(5, 0, .{});
 
     for (1..7) |colour| {
-        for (0..16) |mask| {
-            table[mask * 8 + colour] = tileToRect(colour - 1, mask, .{});
+        for (0..h) |mask| {
+            table[mask * w + colour] = tileToRect(colour - 1, mask, .{});
         }
     }
 
     break :blk table;
 };
-
-test {
-    // To run nested container tests, either, call `refAllDecls` which will
-    // reference all declarations located in the given argument.
-    // `@This()` is a builtin function that returns the innermost container it is called from.
-    // In this example, the innermost container is this file (implicitly a struct).
-    std.testing.refAllDecls(@This());
-
-    _ = puyo;
-}
 
 pub fn main() void {
     sdl_main() catch {
