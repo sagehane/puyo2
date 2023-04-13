@@ -4,7 +4,12 @@ const testing = std.testing;
 pub const grid_width = 6;
 pub const grid_height = 13;
 
-const Coord = packed struct(u8) { x: u4, y: u4 };
+pub const Coord = packed struct(u8) {
+    x: u4,
+    y: u4,
+
+    const cross_coord = Coord{ .x = 3, .y = 0 };
+};
 
 pub const Colour = enum(u3) {
     empty,
@@ -53,7 +58,7 @@ pub const Tsumo = packed struct(u16) {
     colour_2: Colour,
     orientation: Orientation = .up,
     /// Coord of colour_1
-    coord: Coord = .{ .x = 2, .y = 0 },
+    coord: Coord = Coord.cross_coord,
 
     const Orientation = enum(u2) {
         up = 0b00,
@@ -61,6 +66,19 @@ pub const Tsumo = packed struct(u16) {
         down = 0b10,
         right = 0b11,
     };
+
+    pub fn getCoords(self: Tsumo, coords: *[2]Coord) usize {
+        coords.* = [1]Coord{self.coord} ** 2;
+
+        switch (self.orientation) {
+            .up => coords[1].y -%= 1,
+            .left => coords[1].x -= 1,
+            .down => coords[1].y += 1,
+            .right => coords[1].x += 1,
+        }
+
+        return @as(usize, ~@boolToInt(self.coord.y == 0 and self.orientation == .up)) + 1;
+    }
 
     pub fn moveLeft(self: *Tsumo) void {
         if (self.coord.x != @boolToInt(self.orientation == .left))
@@ -107,19 +125,24 @@ pub const Tsumo = packed struct(u16) {
 pub const Puyo = struct {
     grid: [grid_height][grid_width]Sprite = [1][grid_width]Sprite{[1]Sprite{.{ .colour = .empty }} ** grid_width} ** grid_height,
 
-    //pub fn initGrid(
-    //    comptime SurfaceType: type,
-    //    surface: SurfaceType,
-    //    image: SurfaceType,
-    //) !void {
-    //    for (0..12) |y| {
-    //        for (0..6) |x| {
-    //            try surface.SDL_BlitSurface(image, .{ .x = x, .y = y });
-    //        }
-    //    }
-    //}
-
-    pub fn getSprite(self: Puyo, coord: Coord) Sprite {
+    pub inline fn getSprite(self: Puyo, coord: Coord) Sprite {
         return self.grid[coord.y][coord.x];
+    }
+
+    pub inline fn getSpritePtr(self: *Puyo, coord: Coord) *Sprite {
+        return &self.grid[coord.y][coord.x];
+    }
+
+    /// TODO: Make the pieces fall to the bottom if not already
+    /// Returns `false` if the game ended
+    pub fn placeTsumo(self: *Puyo, tsumo: Tsumo) bool {
+        var coords: [2]Coord = undefined;
+        var len = tsumo.getCoords(&coords);
+
+        for (coords[0..len], ([2]Colour{ tsumo.colour_1, tsumo.colour_2 })[0..len]) |coord, colour| {
+            self.getSpritePtr(coord).* = .{ .colour = colour };
+        }
+
+        return std.meta.eql(self.getSprite(Coord.cross_coord), Sprite{ .colour = .empty });
     }
 };
