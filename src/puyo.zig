@@ -80,6 +80,7 @@ pub const Tsumo = packed struct(u16) {
         return @as(usize, ~@boolToInt(self.coord.y == 0 and self.orientation == .up)) + 1;
     }
 
+    // TODO: Check the board to see if moving is possible
     pub fn moveLeft(self: *Tsumo) void {
         if (self.coord.x != @boolToInt(self.orientation == .left))
             self.coord.x -= 1;
@@ -133,16 +134,48 @@ pub const Puyo = struct {
         return &self.grid[coord.y][coord.x];
     }
 
-    /// TODO: Make the pieces fall to the bottom if not already
+    inline fn isBottom(self: Puyo, coord: Coord) bool {
+        var below = coord;
+        below.y +%= 1;
+
+        return coord.y == grid_height - 1 or self.getSprite(below).colour != .empty;
+    }
+
+    inline fn getBottom(self: Puyo, coord: Coord) Coord {
+        var tmp_coord = coord;
+        while (!self.isBottom(tmp_coord))
+            tmp_coord.y += 1;
+
+        return tmp_coord;
+    }
+
+    pub fn tsumoIsAtBottom(self: Puyo, tsumo: Tsumo) bool {
+        var coords: [2]Coord = undefined;
+        var len = tsumo.getCoords(&coords);
+
+        for (coords[0..len]) |coord| {
+            if (self.isBottom(coord))
+                return true;
+        }
+
+        return false;
+    }
+
     /// Returns `false` if the game ended
     pub fn placeTsumo(self: *Puyo, tsumo: Tsumo) bool {
         var coords: [2]Coord = undefined;
         var len = tsumo.getCoords(&coords);
 
-        for (coords[0..len], ([2]Colour{ tsumo.colour_1, tsumo.colour_2 })[0..len]) |coord, colour| {
-            self.getSpritePtr(coord).* = .{ .colour = colour };
+        if (tsumo.orientation == .up or tsumo.orientation == .down) {
+            for (coords[0..len], ([2]Colour{ tsumo.colour_1, tsumo.colour_2 })[0..len]) |*coord, colour| {
+                self.getSpritePtr(coord.*).* = .{ .colour = colour };
+            }
+        } else {
+            for (coords[0..len], ([2]Colour{ tsumo.colour_1, tsumo.colour_2 })[0..len]) |*coord, colour| {
+                self.getSpritePtr(self.getBottom(coord.*)).* = .{ .colour = colour };
+            }
         }
 
-        return std.meta.eql(self.getSprite(Coord.cross_coord), Sprite{ .colour = .empty });
+        return self.getSprite(Coord.cross_coord).colour == .empty;
     }
 };

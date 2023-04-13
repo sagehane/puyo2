@@ -235,7 +235,7 @@ fn sdl_main() GameError!void {
             tsumo.moveDown();
         }
 
-        if (tsumo.coord.y == puyo.grid_height - 1) {
+        if (game.puyo.tsumoIsAtBottom(tsumo)) {
             _ = game.puyo.placeTsumo(tsumo);
             tsumo = .{ .colour_1 = .red, .colour_2 = .blue };
         }
