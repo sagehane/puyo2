@@ -173,6 +173,8 @@ fn sdl_main() GameError!void {
 
     // Held keys of the previous frame
     var prev_key_mask: u8 = 0;
+    // TODO: Consider putting this logic in `puyo.zig`
+    var move_cooldowns: [3]u8 = .{ 0, 0, 0 };
     var event: c.SDL_Event = undefined;
     outer: while (true) {
         // TODO: https://lazyfoo.net/tutorials/SDL/25_capping_frame_rate/index.php
@@ -215,14 +217,25 @@ fn sdl_main() GameError!void {
             tsumo.rotateClockwise();
         }
 
-        // TODO: Slow down movement
-        switch (key_mask & 0b1010) {
-            1 << 1 => tsumo.moveLeft(),
-            1 << 3 => tsumo.moveRight(),
-            else => {},
+        // TODO: Consider making the movement an animation
+        if (move_cooldowns[0] != 0)
+            move_cooldowns[0] -= 1
+        else if (key_mask & 0b1010 == 0b0010) {
+            move_cooldowns[0] = 6;
+            tsumo.moveLeft();
         }
 
-        if (key_mask & 1 << 2 != 0) {
+        if (move_cooldowns[1] != 0)
+            move_cooldowns[1] -= 1
+        else if (key_mask & 0b1010 == 0b1000) {
+            move_cooldowns[1] = 6;
+            tsumo.moveRight();
+        }
+
+        if (move_cooldowns[2] != 0)
+            move_cooldowns[2] -= 1
+        else if (key_mask & 1 << 2 != 0) {
+            move_cooldowns[2] = 6;
             tsumo.moveDown();
         }
 
