@@ -8,18 +8,19 @@ test {
 }
 
 const GameError = error{
-    C,
+    Sdl,
+    Img,
     Other,
 };
 
-fn imgError() GameError {
+fn imgError() error{Img} {
     std.debug.print("IMG Error: {s}\n", .{c.IMG_GetError()});
-    return error.C;
+    return error.Img;
 }
 
-fn sdlError() GameError {
+fn sdlError() error{Sdl} {
     std.debug.print("SDL Error: {s}\n", .{c.SDL_GetError()});
-    return error.C;
+    return error.Sdl;
 }
 
 const puyo_size = 32;
@@ -35,7 +36,7 @@ const Game = struct {
     renderer: *c.SDL_Renderer,
     window: *c.SDL_Window,
 
-    fn init() GameError!Game {
+    fn init() error{ Sdl, Img }!Game {
         var game: Game = undefined;
         game.puyo = .{};
 
@@ -71,7 +72,7 @@ const Game = struct {
         c.SDL_Quit();
     }
 
-    fn renderGrid(self: Game, coord: Coord) GameError!void {
+    fn renderGrid(self: Game, coord: Coord) error{Sdl}!void {
         const wall = &spriteToRect(puyo.Sprite{ .colour = .wall });
         const background = &spriteToRect(puyo.Sprite{ .colour = .empty });
 
@@ -100,7 +101,7 @@ const Game = struct {
 
     /// TODO: Add logic for printing with masks
     /// TODO: Don't let puyos render above the grid
-    fn renderTsumo(self: Game, tsumo: puyo.Tsumo, coord: Coord) GameError!void {
+    fn renderTsumo(self: Game, tsumo: puyo.Tsumo, coord: Coord) error{Sdl}!void {
         var coords: [2]puyo.Coord = undefined;
         var len = tsumo.getCoords(&coords);
 
@@ -157,11 +158,11 @@ const sprite_table = blk: {
 
 pub fn main() void {
     sdl_main() catch {
-        @panic("TODO: Think of a better message\n");
+        @panic("Encountered fatal error\n");
     };
 }
 
-fn sdl_main() GameError!void {
+fn sdl_main() error{ Sdl, Img }!void {
     var game = try Game.init();
     defer game.deinit();
 
@@ -254,7 +255,7 @@ fn sdl_main() GameError!void {
 /// ```
 /// defer c.SDL_DestroyTexture(g_puyo_texture);
 /// ```
-fn getPuyoTexture(renderer: *c.SDL_Renderer) GameError!*c.SDL_Texture {
+fn getPuyoTexture(renderer: *c.SDL_Renderer) error{ Sdl, Img }!*c.SDL_Texture {
     const tmp_surface = c.IMG_Load("resources/puyo_sozai.qoi") orelse return imgError();
     defer c.SDL_FreeSurface(tmp_surface);
     return c.SDL_CreateTextureFromSurface(renderer, tmp_surface) orelse sdlError();
