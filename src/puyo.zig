@@ -42,13 +42,13 @@ pub const Sprite = packed struct(u7) {
 
     test {
         try testing.expectEqual(0x00, @bitCast(u7, Sprite{ .colour = .empty }));
-        try testing.expectEqual(0x10, @bitCast(u7, Sprite{ .colour = .red }));
-        try testing.expectEqual(0x20, @bitCast(u7, Sprite{ .colour = .green }));
-        try testing.expectEqual(0x20, @bitCast(u7, Sprite{ .colour = .blue }));
-        try testing.expectEqual(0x30, @bitCast(u7, Sprite{ .colour = .yellow }));
-        try testing.expectEqual(0x40, @bitCast(u7, Sprite{ .colour = .purple }));
-        try testing.expectEqual(0x50, @bitCast(u7, Sprite{ .colour = .garbage }));
-        try testing.expectEqual(0x60, @bitCast(u7, Sprite{ .colour = .wall }));
+        try testing.expectEqual(0x01, @bitCast(u7, Sprite{ .colour = .red }));
+        try testing.expectEqual(0x02, @bitCast(u7, Sprite{ .colour = .green }));
+        try testing.expectEqual(0x03, @bitCast(u7, Sprite{ .colour = .blue }));
+        try testing.expectEqual(0x04, @bitCast(u7, Sprite{ .colour = .yellow }));
+        try testing.expectEqual(0x05, @bitCast(u7, Sprite{ .colour = .purple }));
+        try testing.expectEqual(0x06, @bitCast(u7, Sprite{ .colour = .garbage }));
+        try testing.expectEqual(0x07, @bitCast(u7, Sprite{ .colour = .wall }));
     }
 };
 
