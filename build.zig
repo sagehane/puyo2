@@ -1,8 +1,16 @@
 const std = @import("std");
 
+comptime {
+    const current = @import("builtin").zig_version;
+    const minimum = std.SemanticVersion.parse("0.11.0-dev.2830+295b8ca46") catch unreachable;
+
+    if (current.order(minimum) == .lt) {
+        @compileError(std.fmt.comptimePrint("Your Zig version v{} does not meet the minimum build requirement of v{}", .{ current, minimum }));
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
