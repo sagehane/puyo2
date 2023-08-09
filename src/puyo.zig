@@ -41,14 +41,14 @@ pub const Sprite = packed struct(u7) {
     };
 
     test {
-        try testing.expectEqual(0x00, @bitCast(u7, Sprite{ .colour = .empty }));
-        try testing.expectEqual(0x01, @bitCast(u7, Sprite{ .colour = .red }));
-        try testing.expectEqual(0x02, @bitCast(u7, Sprite{ .colour = .green }));
-        try testing.expectEqual(0x03, @bitCast(u7, Sprite{ .colour = .blue }));
-        try testing.expectEqual(0x04, @bitCast(u7, Sprite{ .colour = .yellow }));
-        try testing.expectEqual(0x05, @bitCast(u7, Sprite{ .colour = .purple }));
-        try testing.expectEqual(0x06, @bitCast(u7, Sprite{ .colour = .garbage }));
-        try testing.expectEqual(0x07, @bitCast(u7, Sprite{ .colour = .wall }));
+        try testing.expectEqual(0x00, @bitCast(Sprite{ .colour = .empty }));
+        try testing.expectEqual(0x01, @bitCast(Sprite{ .colour = .red }));
+        try testing.expectEqual(0x02, @bitCast(Sprite{ .colour = .green }));
+        try testing.expectEqual(0x03, @bitCast(Sprite{ .colour = .blue }));
+        try testing.expectEqual(0x04, @bitCast(Sprite{ .colour = .yellow }));
+        try testing.expectEqual(0x05, @bitCast(Sprite{ .colour = .purple }));
+        try testing.expectEqual(0x06, @bitCast(Sprite{ .colour = .garbage }));
+        try testing.expectEqual(0x07, @bitCast(Sprite{ .colour = .wall }));
     }
 };
 
@@ -77,22 +77,22 @@ pub const Tsumo = packed struct(u16) {
             .right => coords[1].x += 1,
         }
 
-        return @as(usize, ~@boolToInt(self.coord.y == 0 and self.orientation == .up)) + 1;
+        return @as(usize, ~@intFromBool(self.coord.y == 0 and self.orientation == .up)) + 1;
     }
 
     // TODO: Check the board to see if moving is possible
     pub fn moveLeft(self: *Tsumo) void {
-        if (self.coord.x != @boolToInt(self.orientation == .left))
+        if (self.coord.x != @intFromBool(self.orientation == .left))
             self.coord.x -= 1;
     }
 
     pub fn moveRight(self: *Tsumo) void {
-        if (self.coord.x < grid_width - (@as(u8, @boolToInt(self.orientation == .right)) + 1))
+        if (self.coord.x < grid_width - (@as(u8, @intFromBool(self.orientation == .right)) + 1))
             self.coord.x += 1;
     }
 
     pub fn moveDown(self: *Tsumo) void {
-        if (self.coord.y < grid_height - (@as(u8, @boolToInt(self.orientation == .down)) + 1))
+        if (self.coord.y < grid_height - (@as(u8, @intFromBool(self.orientation == .down)) + 1))
             self.coord.y += 1;
     }
 
@@ -113,12 +113,12 @@ pub const Tsumo = packed struct(u16) {
     }
 
     pub fn rotateClockwise(self: *Tsumo) void {
-        self.orientation = @intToEnum(Orientation, @enumToInt(self.orientation) -% 1);
+        self.orientation = @enumFromInt(@intFromEnum(self.orientation) -% 1);
         self.adjustCoord();
     }
 
     pub fn rotateCounterClockwise(self: *Tsumo) void {
-        self.orientation = @intToEnum(Orientation, @enumToInt(self.orientation) +% 1);
+        self.orientation = @enumFromInt(@intFromEnum(self.orientation) +% 1);
         self.adjustCoord();
     }
 };

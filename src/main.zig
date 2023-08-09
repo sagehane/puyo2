@@ -88,7 +88,7 @@ const Game = struct {
                 const rect = &tileToRect(x + coord.x + 1, y_offset, .{});
                 if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, background, rect) != 0) return sdlError();
 
-                const sprite = self.puyo.getSprite(.{ .x = @intCast(u3, x), .y = @intCast(u4, y + 1) });
+                const sprite = self.puyo.getSprite(.{ .x = @intCast(x), .y = @intCast(y + 1) });
                 if (c.SDL_RenderCopy(self.renderer, self.puyo_texture, &spriteToRect(sprite), rect) != 0) return sdlError();
             }
         }
@@ -133,7 +133,7 @@ inline fn tileToRect(
 }
 
 inline fn spriteToRect(sprite: puyo.Sprite) c.SDL_Rect {
-    return sprite_table[@bitCast(u7, sprite)];
+    return sprite_table[@as(u7, @bitCast(sprite))];
 }
 
 const sprite_table = blk: {
